@@ -1,0 +1,17 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sqlalchemy>=2.0
+alembic>=1.13
+psycopg[binary]>=3.1
+redis>=5.0
+celery>=5.4
+boto3>=1.34
+python-multipart>=0.0.9
+prometheus-client>=0.20
+pydantic>=2.6
+pydantic-settings>=2.2
+pillow>=10.3
+pypdf>=4.0
+pypdfium2>=4.30
+numpy>=1.26
+nepali-datetime>=1.0.8  # Bikram Sambat <-> Gregorian conversion (pure Python); without it BS dates are kept verbatim, never guessed

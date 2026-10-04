@@ -1,0 +1,115 @@
+# Local development stack. Default credentials below are for local dev ONLY. Production: managed Postgres/Redis/S3, orchestrator (ECS/K8s), TLS at the load balancer.
+# Dev object storage: a shared named volume (MinIO no longer publishes images on Docker Hub).
+# These values override .env so an older .env that still points at MinIO keeps working.
+# OCR_STORAGE_BACKEND=local is rejected when OCR_ENV=prod; use real S3 there.
+x-app-env: &app-env
+  env_file: .env
+  environment:
+    OCR_STORAGE_BACKEND: local
+    OCR_LOCAL_STORAGE_DIR: /data/objects
+    OCR_REFERENCE_EXTRACTOR: layout-kv
+    OCR_EXTRACTOR_ALTERNATES: ""
+    OCR_RETRY_PASSES: "upscale@3;upscale,adaptive@6"
+    OCR_RETRY_ON_KEY_FIELDS: "true"
+    OCR_VALIDATE_REQUIRED_FIELDS: "true"
+    OCR_RETRY_PREPROCESS_OPS: "upscale,adaptive"
+    OCR_RETRY_TESSERACT_PSM: "6"
+    OMP_THREAD_LIMIT: "1"
+    
+    # OCR_REFERENCE_EXTRACTOR: layout-rules   # layout-aware rules; the regex baseline stays as automatic fallback
+    # Second OCR pass for poor first results (phone photos of receipts). Clean documents never run it. Measured on one real
+    # receipt photo and on synthetic invoices: see docs/OCR_RETRY.md.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment: {POSTGRES_USER: ocr, POSTGRES_PASSWORD: ocr, POSTGRES_DB: ocr}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U ocr"], interval: 5s, retries: 10}
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]  # broker + limiter: never evict
+    volumes: [redisdata:/data]
+    healthcheck: {test: ["CMD", "redis-cli", "ping"], interval: 5s, retries: 10}
+
+  storage-init:   # one-shot: make the object volume writable by the non-root app user (uid 10001)
+    build: {context: ., target: api}
+    user: "0:0"
+    command: ["sh", "-c", "mkdir -p /data/objects && chown -R 10001:10001 /data"]
+    volumes: [objects:/data]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    security_opt: ["no-new-privileges:true"]
+
+  migrate:
+    build: {context: ., target: api}
+    <<: *app-env
+    command: ["alembic", "upgrade", "head"]
+    depends_on: {postgres: {condition: service_healthy}}
+
+  api:
+    build: {context: ., target: api}
+    <<: *app-env
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      storage-init: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    ports: ["127.0.0.1:8000:8000"]
+    volumes: [objects:/data]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy: {resources: {limits: {cpus: "1", memory: 512M}}}
+
+  worker:   # interactive queue (single-document submissions)
+    build: {context: ., target: worker}
+    <<: *app-env
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "ocr", "--concurrency=2",
+              "--loglevel=INFO", "--max-tasks-per-child=200"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      storage-init: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    volumes: [objects:/data]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping -d celery@$$HOSTNAME --timeout 5 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy: {resources: {limits: {cpus: "2", memory: 2G}}}   # scale: docker compose up --scale worker=4
+
+  worker-bulk:   # bulk queue on its own capacity, so a large batch cannot starve interactive jobs
+    build: {context: ., target: worker}
+    <<: *app-env
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "-Q", "ocr_bulk", "--concurrency=1",
+              "--loglevel=INFO", "--max-tasks-per-child=200", "-n", "bulk@%h"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      storage-init: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    volumes: [objects:/data]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy: {resources: {limits: {cpus: "2", memory: 2G}}}
+
+  beat:   # exactly ONE replica: stale-job reaper + retention purge
+    build: {context: ., target: api}
+    <<: *app-env
+    command: ["celery", "-A", "app.workers.celery_app", "beat", "--loglevel=INFO", "-s", "/tmp/celerybeat-schedule"]
+    depends_on: {redis: {condition: service_healthy}}
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      disable: true
+
+volumes: {pgdata: {}, redisdata: {}, objects: {}}

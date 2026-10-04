@@ -1,0 +1,4 @@
+# OPTIONAL alternative OCR engine (OCR_OCR_PROVIDER=rapidocr). Benchmarked in docs/BENCHMARK.md; NOT the default.
+# Adds onnxruntime + opencv (~600 MB RSS per worker process in the benchmark). Install only if your own benchmark justifies it.
+-r requirements.txt
+rapidocr-onnxruntime>=1.3,<2

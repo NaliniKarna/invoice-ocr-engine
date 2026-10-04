@@ -1,0 +1,41 @@
+{
+ "cpus": 2,
+ "created_at": "2026-10-01T02:15:26.089481+00:00",
+ "engines": {
+  "rapidocr": {
+   "cold_start_s": 5.89,
+   "engine": "rapidocr",
+   "first_page_s": 22.95,
+   "model_files_mb": 16.2,
+   "pages_timed": 11,
+   "peak_rss_mb": 671.4,
+   "version": "1.4.4",
+   "warm_ms_p50": 1936,
+   "warm_ms_p95": 2328
+  },
+  "tesseract": {
+   "cold_start_s": 6.4,
+   "engine": "tesseract",
+   "first_page_s": 16.53,
+   "model_files_mb": 4.1,
+   "pages_timed": 11,
+   "peak_rss_mb": 200.4,
+   "version": "5.3.4",
+   "warm_ms_p50": 1365,
+   "warm_ms_p95": 1648
+  }
+ },
+ "kind": "resources",
+ "load_avg_end": [
+  1.326171875,
+  0.38232421875,
+  0.13232421875
+ ],
+ "load_avg_start": [
+  0.240234375,
+  0.0498046875,
+  0.01611328125
+ ],
+ "pages": 12,
+ "synthetic": true
+}

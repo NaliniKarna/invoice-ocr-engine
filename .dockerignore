@@ -1,0 +1,13 @@
+.git
+.env
+.data
+__pycache__
+tests
+docs
+*.pyc
+dump.rdb
+.env.*
+!.env.example
+loadtest
+*.md
+!README.md

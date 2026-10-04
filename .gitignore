@@ -1,0 +1,44 @@
+# Secrets: never commit. .env.example is the only env file that belongs in git.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# Test, lint and coverage output
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Local runtime data and uploaded invoices (real documents must never be committed)
+.data/
+data/
+*.db
+*.sqlite3
+celerybeat-schedule*
+dump.rdb
+
+# Scratch (benchmarks/results is committed evidence cited by the docs: keep it tracked)
+loadtest/*.csv
+loadtest/*.html
+*.log
+tmp/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

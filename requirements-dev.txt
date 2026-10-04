@@ -1,0 +1,8 @@
+-r requirements.txt
+pytest>=8
+pytest-cov
+httpx
+fakeredis
+lupa
+moto[s3]
+reportlab
