@@ -427,7 +427,8 @@ def test_openapi_documents_real_surface_only(client):
         "/internal/v1/models/{model_id}/approve", "/internal/v1/models/{model_id}/evaluations",
         "/internal/v1/models/{model_id}/promote", "/internal/v1/models/{model_id}/retire",
         "/internal/v1/models/{model_id}/rollback"}
-    assert set(spec["paths"]) == original | ml_internal
+    # Additive (review web layer): GET /api/v1/bills (list) shares the existing path; GET /api/v1/bills/{process_id}/file is new.
+    assert set(spec["paths"]) == original | ml_internal | {"/api/v1/bills/{process_id}/file"}
     assert spec["components"]["securitySchemes"]["ApiKey"] == {"type": "apiKey", "in": "header", "name": "X-API-Key"}
     post = spec["paths"]["/api/v1/bills"]["post"]
     assert {"202", "401", "413", "415", "422", "429", "503"} <= set(post["responses"])

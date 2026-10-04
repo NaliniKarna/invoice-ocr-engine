@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.errors import Conflict, NotFound, ValidationFailed
 from app.core.ids import new_id
 from app.feedback.validation import validate_corrections
-from app.models import Feedback
+from app.models import Feedback, Review
 from app.repositories.process import ProcessRepository
 from app.schemas.bills import FeedbackRequest, FeedbackResponse
 from app.services import state
@@ -32,6 +33,9 @@ class FeedbackService:
         if res is None or res.data is None:
             raise Conflict("Result is no longer available", code="result_unavailable")
 
+        if req.reviewed and self.db.query(Review.id).filter_by(client_id=p.client_id, process_id=process_id).first() is not None:
+            raise Conflict("This document was already reviewed", code="already_reviewed")
+
         valid, errors = validate_corrections([(c.field, c.value) for c in req.corrections], res.data)
         if errors:
             raise ValidationFailed("One or more corrections are invalid; nothing was stored",
@@ -46,8 +50,15 @@ class FeedbackService:
                 original_value=v.original, corrected_value=v.corrected,
                 ocr_model_version_id=res.ocr_model_version_id, extractor_model_version_id=res.extractor_model_version_id,
                 api_key_id=p.api_key_id, comment=req.comment, status="validated"))
+        if req.reviewed:
+            self.db.add(Review(id=new_id("review"), submission_id=sub, client_id=p.client_id, process_id=process_id,
+                               outcome="corrected" if valid else "confirmed", api_key_id=p.api_key_id))
         self.audit.record(action="feedback.submit", resource_type="process", resource_id=process_id,
                           client_id=p.client_id, api_key_id=p.api_key_id, ip=p.ip,
-                          details={"submission_id": sub, "fields": [v.field for v in valid]})
-        self.db.commit()
-        return FeedbackResponse(submission_id=sub, accepted=len(valid), feedback_ids=ids)
+                          details={"submission_id": sub, "fields": [v.field for v in valid], "reviewed": req.reviewed})
+        try:
+            self.db.commit()
+        except IntegrityError:   # two submissions raced: the unique (client, process) review row decides
+            self.db.rollback()
+            raise Conflict("This document was already reviewed", code="already_reviewed")
+        return FeedbackResponse(submission_id=sub, accepted=len(valid), feedback_ids=ids, reviewed=req.reviewed)

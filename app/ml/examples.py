@@ -22,7 +22,7 @@ from app.core.time import utcnow
 from app.extraction.schema import SCHEMA_VERSION, InvoiceData
 from app.feedback.validation import _ITEM_RE, _SCALAR
 from app.ml.quality import QualityConfig, blocks_approval, check_example, content_hash, group_key_for
-from app.models import Client, Feedback, OcrResult, Process, TrainingDataset, TrainingExample
+from app.models import Client, Feedback, OcrResult, Process, Review, TrainingDataset, TrainingExample
 from app.models.ml import DatasetExample
 from app.observability import metrics as m
 from app.services.audit import AuditService
@@ -94,8 +94,15 @@ class ExampleService:
                 Feedback.client_id == client_id, Feedback.process_id == process_id,
                 Feedback.status.in_(("validated", "exported")))).scalars().all()
             if not rows:
-                raise Conflict("No validated corrections exist; a machine result alone is not ground truth",
-                               code="no_corrections")
+                # A person who reviewed the whole document and changed nothing has confirmed the machine result. That is a
+                # human decision, not "a machine result alone", so it may be proposed (it still passes the quality gates and
+                # operator review like any other example).
+                confirmed = self.db.execute(select(Review.id).where(
+                    Review.client_id == client_id, Review.process_id == process_id)).first() is not None
+                if not confirmed:
+                    raise Conflict("No validated corrections exist; a machine result alone is not ground truth",
+                                   code="no_corrections")
+                source = "client_confirmation"
             by_field: dict[str, set[str]] = {}
             for r in rows:
                 by_field.setdefault(r.field_path, set()).add(json.dumps(r.corrected_value, sort_keys=True))

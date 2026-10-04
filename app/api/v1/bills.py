@@ -1,14 +1,14 @@
 """Thin routes: parse -> call service -> shape response. No business logic here."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import (batch_id_param, bulk_rate_limit, get_container, get_db, idempotency_key, process_id_param, require_scope,
                           upload_rate_limit)
 from app.core.container import Container
-from app.schemas.bills import (BatchDetail, BulkAccepted, FeedbackRequest, FeedbackResponse, ProcessDetail,
+from app.schemas.bills import (BatchDetail, BulkAccepted, FeedbackRequest, FeedbackResponse, ListResponse, ProcessDetail,
                                SubmitAccepted)
 from app.schemas.common import ErrorResponse
 from app.schemas.common import parse_metadata
@@ -68,6 +68,17 @@ def submit_bulk(files: list[UploadFile] = File(...), metadata: str | None = Form
     return _reply(o, f"/api/v1/bills/batches/{o.body['batch_id']}")
 
 
+@router.get("", response_model=ListResponse, response_model_exclude_none=True, summary="List this tenant's documents",
+            description="Newest first, 1-100 per page (`limit`, default 50), `cursor` from the previous page's `next_cursor`. "
+                        "`review=pending` returns completed documents nobody has reviewed yet; `review=reviewed` the reviewed ones.",
+            responses={**_COMMON, **_errs(422)})
+def list_bills(limit: int = Query(default=50, ge=1, le=100), cursor: str | None = Query(default=None, max_length=200),
+               review: str | None = Query(default=None, pattern="^(pending|reviewed)$"),
+               p: Principal = Depends(require_scope("bills:read")), db: Session = Depends(get_db),
+               c: Container = Depends(get_container)):
+    return ProcessService(db, c.storage).list(p, limit=limit, cursor=cursor, review=review)
+
+
 @router.get("/batches/{batch_id}", response_model=BatchDetail, summary="Batch status",
             responses={**_COMMON, **_errs(404)})
 def get_batch(batch_id: str = Depends(batch_id_param), p: Principal = Depends(require_scope("bills:read")),
@@ -81,6 +92,17 @@ def get_batch(batch_id: str = Depends(batch_id_param), p: Principal = Depends(re
 def get_bill(process_id: str = Depends(process_id_param), p: Principal = Depends(require_scope("bills:read")),
              db: Session = Depends(get_db), c: Container = Depends(get_container)):
     return ProcessService(db, c.storage).get_detail(p, process_id)
+
+
+@router.get("/{process_id}/file", summary="The stored original document",
+            description="Returns the file as uploaded (PNG, JPEG or PDF), for display next to the extracted data. Tenant-scoped; "
+                        "never cached; `404 document_unavailable` once the document was purged.",
+            responses={200: {"content": {"image/png": {}, "image/jpeg": {}, "application/pdf": {}}}, **_COMMON, **_errs(404)})
+def get_bill_file(process_id: str = Depends(process_id_param), p: Principal = Depends(require_scope("bills:read")),
+                  db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    data, content_type = ProcessService(db, c.storage).get_file(p, process_id)
+    return Response(content=data, media_type=content_type,
+                    headers={"Content-Disposition": 'inline; filename="invoice"', "Cache-Control": "private, no-store"})
 
 
 @router.post("/{process_id}/cancel", response_model=ProcessDetail, response_model_exclude_none=True,
@@ -100,7 +122,7 @@ def delete_bill(process_id: str = Depends(process_id_param), p: Principal = Depe
 
 
 @router.post("/{process_id}/feedback", status_code=201, response_model=FeedbackResponse,
-             summary="Submit field corrections", description="Atomic: any invalid correction rejects the whole submission. The original result is never modified; corrections never change a deployed model.",
+             summary="Submit field corrections and/or a review", description="Atomic: any invalid correction rejects the whole submission. The original result is never modified; corrections never change a deployed model. Send `reviewed: true` when a person checked the whole document; the corrections list may then be empty (confirmed as extracted). A document can be reviewed once (409 `already_reviewed`).",
              responses={**_COMMON, **_errs(404, 409, 422)})
 def submit_feedback(req: FeedbackRequest, process_id: str = Depends(process_id_param),
                     p: Principal = Depends(require_scope("feedback:write")), db: Session = Depends(get_db),

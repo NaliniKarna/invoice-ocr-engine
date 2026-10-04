@@ -1,5 +1,6 @@
 # Resolved 2026-09-30 from a clean venv (Python 3.11) with requirements.txt + requirements-ocr-tesseract.txt.
 # Regenerate: python -m venv v && v/bin/pip install -r requirements.txt -r requirements-ocr-tesseract.txt && v/bin/pip freeze
+# Added in Prompt 3 from the development environment (NOT regenerated from a clean venv; regenerate before release):
 alembic==1.20.0
 amqp==5.4.0
 annotated-doc==0.0.5
@@ -9,27 +10,32 @@ billiard==4.3.0
 boto3==1.43.105
 botocore==1.43.105
 celery==5.6.3
-click==8.5.0
+certifi==2026.7.22
 click-didyoumean==0.3.1
 click-plugins==1.1.1.2
 click-repl==0.4.0
+click==8.5.0
 fastapi==0.142.2
 h11==0.16.0
+httpcore==1.0.9
 httptools==0.8.0
+httpx==0.28.1
 idna==3.20
 jmespath==1.1.0
 kombu==5.6.2
 Mako==1.4.3
 MarkupSafe==3.0.3
+nepali-datetime==1.0.8.5
+numpy==2.4.4
 opentelemetry-api==1.45.0
 packaging==26.3
 pillow==12.3.0
 prometheus_client==0.26.0
 prompt_toolkit==3.0.53
-psycopg==3.3.6
 psycopg-binary==3.3.6
-pydantic==2.13.5
+psycopg==3.3.6
 pydantic-settings==2.15.0
+pydantic==2.13.5
 pydantic_core==2.46.5
 pypdf==6.19.0
 pypdfium2==5.13.0
@@ -54,6 +60,3 @@ vine==5.1.0
 watchfiles==1.3.0
 wcwidth==0.2.13
 websockets==17.1
-# Added in Prompt 3 from the development environment (NOT regenerated from a clean venv; regenerate before release):
-numpy==2.4.4
-nepali-datetime==1.0.8.5

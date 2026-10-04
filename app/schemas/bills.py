@@ -4,7 +4,7 @@ import datetime as dt
 from decimal import Decimal
 from typing import Annotated, Any
 
-from pydantic import BaseModel, Field, PlainSerializer
+from pydantic import BaseModel, Field, PlainSerializer, model_validator
 
 from app.extraction.schema import ValidationIssue
 
@@ -83,6 +83,9 @@ class ProcessDetail(BaseModel):
     updated_at: dt.datetime
     completed_at: dt.datetime | None = None
     attempts: int = 0
+    filename: str | None = None
+    reviewed: bool | None = Field(default=None, description="True once a person reviewed the document (see feedback `reviewed`)")
+    reviewed_at: dt.datetime | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     result: ResultPayload | None = None
     confidence: float | None = Field(default=None, description="PROVISIONAL heuristic score in [0,1]. Not a calibrated probability.")
@@ -111,14 +114,44 @@ class Correction(BaseModel):
 
 
 class FeedbackRequest(BaseModel):
-    corrections: list[Correction] = Field(min_length=1, max_length=100)
+    corrections: list[Correction] = Field(default_factory=list, max_length=100)
     comment: str | None = Field(default=None, max_length=1000)
+    reviewed: bool = Field(default=False, description="True when a person checked the WHOLE document: fields that are not corrected "
+                           "are confirmed as extracted. With `reviewed=true` the corrections list may be empty (confirmed as extracted). "
+                           "A document can be reviewed once.")
+
+    @model_validator(mode="after")
+    def _something_to_submit(self):
+        if not self.corrections and not self.reviewed:
+            raise ValueError("Send at least one correction, or set reviewed=true to confirm the extraction")
+        return self
 
 
 class FeedbackResponse(BaseModel):
     submission_id: str
     accepted: int
     feedback_ids: list[str]
+    reviewed: bool = False
+
+
+class ListItem(BaseModel):
+    """One row of the document list. Headline values come from the stored extraction (null until the document is completed)."""
+    process_id: str
+    status: str
+    filename: str | None = None
+    created_at: dt.datetime
+    reviewed: bool = False
+    reviewed_at: dt.datetime | None = None
+    vendor: str | None = None
+    invoice_number: str | None = None
+    date: dt.date | None = None
+    total: Num | None = None
+    currency: str | None = None
+
+
+class ListResponse(BaseModel):
+    items: list[ListItem]
+    next_cursor: str | None = Field(default=None, description="Pass as `cursor` to get the next (older) page")
 
 
 class SubmitAccepted(BaseModel):

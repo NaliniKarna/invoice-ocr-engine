@@ -102,7 +102,7 @@ def test_every_documented_operation_rejects_an_unauthenticated_call(client, cont
     ops = operations(client)
     internal = [o for o in ops if o[1].startswith("/internal/")]
     public = [o for o in ops if o[1].startswith("/api/")]
-    assert len(internal) == 6 + 12 and len(public) == 7, (len(internal), len(public))   # 6 admin + 12 ML ops; fails if a route is added unaudited
+    assert len(internal) == 6 + 12 and len(public) == 9, (len(internal), len(public))   # 6 admin + 12 ML ops; public 7 + list + file; fails if a route is added unaudited
     for m, p in internal + public:
         path = _concrete(p).replace("{process_id}", "0" * 20).replace("{batch_id}", "batch_" + "0" * 32) \
             .replace("{key_id}", "key_x")

@@ -73,7 +73,7 @@ class TrainingExample(Base, TimestampMixin):
     process_id: Mapped[str] = mapped_column(String(64))
     schema_version: Mapped[str] = mapped_column(String(16))
     truth: Mapped[dict] = mapped_column(JsonType)
-    source: Mapped[str] = mapped_column(String(24), default="client_correction")   # client_correction | reviewer | import
+    source: Mapped[str] = mapped_column(String(24), default="client_correction")   # client_correction | client_confirmation | reviewer | import
     status: Mapped[str] = mapped_column(String(16), default="proposed")  # proposed | needs_review | approved | rejected
     revision: Mapped[int] = mapped_column(Integer, default=1)
     quality_report: Mapped[dict] = mapped_column(JsonType, default=dict)

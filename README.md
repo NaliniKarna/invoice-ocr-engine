@@ -1,7 +1,7 @@
 # Bill OCR API
 
 Multi-tenant OCR-as-a-Service backend: FastAPI · PostgreSQL · Redis · Celery · S3/MinIO.
-Design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (requirements, decisions, ERD, API, security model, limits, failure modes).
+Contributor review UI: [`docs/WEB_UI.md`](docs/WEB_UI.md). Design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (requirements, decisions, ERD, API, security model, limits, failure modes).
 
 ## Implementation status (honest)
 

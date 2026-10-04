@@ -1,5 +1,6 @@
 # Secrets: never commit. .env.example is the only env file that belongs in git.
 .env
+.env.ui
 .env.*
 !.env.example
 *.pem

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import String, func, select, tuple_, type_coerce, update
 from sqlalchemy.orm import Session
 
 from app.core.time import utcnow
-from app.models import Batch, OcrResult, Process
+from app.models import Batch, OcrResult, Process, Review
 from app.services import state
 
 
@@ -34,6 +34,26 @@ class ProcessRepository:
         return list(self.db.execute(select(Process).where(
             Process.client_id == client_id, Process.batch_id == batch_id, Process.deleted_at.is_(None))
             .order_by(Process.created_at, Process.id)).scalars())
+
+    def list_page(self, client_id: str, *, limit: int, before: tuple | None = None, review: str | None = None):
+        """Newest first, keyset-paginated on (created_at, id). Returns (Process, review_created_at | None, result_data | None).
+        review: None = every document, "pending" = completed and not reviewed yet, "reviewed" = reviewed."""
+        q = (select(Process, Review.created_at, OcrResult.data)
+             .outerjoin(Review, (Review.client_id == Process.client_id) & (Review.process_id == Process.id))
+             .outerjoin(OcrResult, (OcrResult.client_id == Process.client_id) & (OcrResult.process_id == Process.id))
+             .where(Process.client_id == client_id, Process.deleted_at.is_(None)))
+        if review == "pending":
+            q = q.where(Process.status == state.COMPLETED, Review.id.is_(None))
+        elif review == "reviewed":
+            q = q.where(Review.id.is_not(None))
+        if before is not None:
+            ts = before[0]
+            if self.db.get_bind().dialect.name == "sqlite":
+                # SQLite (the test shim; production is PostgreSQL) stores CURRENT_TIMESTAMP as text without fractions, while a
+                # bound datetime would render with ".000000": compare the text as stored.
+                ts = type_coerce(ts.strftime("%Y-%m-%d %H:%M:%S") + (f".{ts.microsecond:06d}" if ts.microsecond else ""), String)
+            q = q.where(tuple_(Process.created_at, Process.id) < tuple_(ts, before[1]))
+        return list(self.db.execute(q.order_by(Process.created_at.desc(), Process.id.desc()).limit(limit)).all())
 
     def count_active(self, client_id: str) -> int:
         return self.db.execute(select(func.count()).select_from(Process).where(

@@ -12,6 +12,7 @@ PREFIXES = {
     "api_key": "key",
     "feedback": "fb",
     "submission": "sub",
+    "review": "rev",
     "result": "res",
     "model": "mdl",
     "audit": "aud",

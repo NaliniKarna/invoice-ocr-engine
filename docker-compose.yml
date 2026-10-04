@@ -7,18 +7,11 @@ x-app-env: &app-env
   environment:
     OCR_STORAGE_BACKEND: local
     OCR_LOCAL_STORAGE_DIR: /data/objects
-    OCR_REFERENCE_EXTRACTOR: layout-kv
-    OCR_EXTRACTOR_ALTERNATES: ""
-    OCR_RETRY_PASSES: "upscale@3;upscale,adaptive@6"
-    OCR_RETRY_ON_KEY_FIELDS: "true"
-    OCR_VALIDATE_REQUIRED_FIELDS: "true"
-    OCR_RETRY_PREPROCESS_OPS: "upscale,adaptive"
-    OCR_RETRY_TESSERACT_PSM: "6"
-    OMP_THREAD_LIMIT: "1"
-    
-    # OCR_REFERENCE_EXTRACTOR: layout-rules   # layout-aware rules; the regex baseline stays as automatic fallback
+    OCR_REFERENCE_EXTRACTOR: layout-kv   # layout-aware rules; the regex baseline stays as automatic fallback
     # Second OCR pass for poor first results (phone photos of receipts). Clean documents never run it. Measured on one real
     # receipt photo and on synthetic invoices: see docs/OCR_RETRY.md.
+    OCR_RETRY_PREPROCESS_OPS: upscale,adaptive
+    OCR_RETRY_TESSERACT_PSM: "6"
 
 services:
   postgres:
@@ -109,7 +102,21 @@ services:
     tmpfs: [/tmp]
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
-    healthcheck:
-      disable: true
+
+  webui:   # invoice review pages for contributors: docker compose --profile ui up -d webui
+    profiles: [ui]
+    build: {context: ., target: webui}
+    # Deliberately NOT <<: *app-env: this service must not see the pepper, admin token or database credentials.
+    environment:
+      OCR_UI_API_BASE_URL: http://api:8000
+      OCR_UI_API_KEY: ${OCR_UI_API_KEY:-}   # the collection client's API key; set in your shell or a compose-level .env, never in the browser
+      OCR_UI_FEEDBACK_NOTICE: ${OCR_UI_FEEDBACK_NOTICE:-Your corrections may help improve invoice extraction accuracy.}
+    depends_on: {api: {condition: service_healthy}}
+    ports: ["127.0.0.1:8080:8080"]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy: {resources: {limits: {cpus: "0.5", memory: 256M}}}
 
 volumes: {pgdata: {}, redisdata: {}, objects: {}}
